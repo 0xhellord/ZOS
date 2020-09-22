@@ -8,7 +8,7 @@ org 0x7c00
 
 jmp start
 
-TestMsg db "returned from loaded??", 0xd, 0xa, 0
+TestMsg db "returned from loader??", 0xd, 0xa, 0
 IOError db "Disk IO Failed", 0xd , 0xa , 0
 LogoStr db "................", 0xd, 0xa,  0xd, 0xa, "ZhaZha BootLoader - 20200922", 0
 
