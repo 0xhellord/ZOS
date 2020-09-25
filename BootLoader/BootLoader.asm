@@ -2,10 +2,65 @@
 
 org 0x8000
 
+mov				[BootDriveNum], dl
 jmp start
 
-LOGO        db "loader!!", 0
-IOError     db "Disk IO Failed", 0xd , 0xa , 0
+BootDriveNum	db 0
+LOGO        	db "loader!!", 0
+IOErrorLBA     	db "Disk IO Failed:Loader LBA", 0xd , 0xa , 0
+IOError     	db "Disk IO Failed:Loader CHS", 0xd , 0xa , 0
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Reads a sector using BIOS Int 13h fn 42h ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Input:  EAX 		= LBA                   ;;
+;;         CX    	= sector count          ;;
+;;         ES:BX 	-> buffer address       ;;
+;; Output: CF = 1 if error                  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+ReadSectorLBA:
+        pushad
+
+ReadSectorLBANext:
+        pusha
+
+        push    byte 0
+        push    byte 0 ; 32-bit LBA only: up to 2TB disks
+        push    eax
+        push    es
+        push    bx
+        push    byte 1 ; sector count word = 1
+        push    byte 16 ; packet size byte = 16, reserved byte = 0
+
+        mov     ah, 42h
+        ;mov     dl, [bsDriveNumber]
+        mov     si, sp
+        push    ss
+        pop     ds
+        int     13h
+        push    cs
+        pop     ds
+
+        jc      short ErrRead
+        add     sp, 16 ; the two instructions are swapped so as not to overwrite carry flag
+
+        popa
+        dec     cx
+        jz      ReadSectorLBADone2      ; last sector
+
+        add     bx, 512 ; adjust offset for next sector
+        add     eax, byte 1             ; adjust LBA for next sector
+        jmp     short ReadSectorLBANext
+
+ReadSectorLBADone2:
+        popad
+        ret
+
+ErrRead:
+		push IOErrorLBA
+		call PrintString
+		jmp $
+
 
 ; AL:Sector Count CL: Sector ES:BX: Buffer
 ReadSector:
@@ -26,7 +81,7 @@ PrintEndLine:
     call    PrintChar
     push    0xa
     call    PrintChar
-    ret;
+    ret
 
 PrintChar:
     push    si
@@ -54,12 +109,47 @@ PrintString:
     END:
         call    PrintEndLine
     pop     si
-    ret     2;
+    ret     2
+
+; Input: 	ax - LBA value
+; Output: 	ax - Sector
+;	  		bx - Head	
+;	  		cx - Cylinder
+
+LBAToCHS:
+	PUSH 	dx							; Save the value in dx
+	XOR 	dx,dx						; Zero dx
+	MOV 	bx, 63						; Move into place STP (LBA all ready in place)
+	DIV 	bx							; Make the divide (ax/bx -> ax,dx)
+	inc 	dx							; Add one to the remainder (sector value)
+	push 	dx						    ; Save the sector value on the stack
+
+	XOR 	dx,dx						; Zero dx
+	MOV 	bx, 16						; Move NumHeads into place (NumTracks all ready in place)
+	DIV 	bx							; Make the divide (ax/bx -> ax,dx)
+
+	MOV 	cx,ax						; Move ax to cx (Cylinder)
+	MOV 	bx,dx						; Move dx to bx (Head)
+	POP 	ax							; Take the last value entered on the stack off.
+										; It doesn't need to go into the same register.
+										; (Sector)
+	POP 	dx						    ; Restore dx, just in case something important was
+										; originally in there before running this.
+	RET								; Return to the main function
+
 
 %include    "protectmode.asm"
 
 start:
     push        LOGO
+    call        PrintString
+
+	;mov			dl, BootDriveNum
+	mov			bx, 0x500			;buffer
+	mov			Eax, 0x8			;LBA
+	mov			cx, 0X2				;sector count;
+	call		ReadSectorLBA
+	push        LOGO
     call        PrintString
     call        EnableA20
     call        InitGDT
@@ -70,23 +160,29 @@ start:
 	mov	        cr0, eax
     jmp         CODE_SEG:PMMODE
 
-
-
-
 [bits 32]
 PMMODE:
     mov	    ax, DATA_SEG		; set data segments to data selector (0x10)
 	mov	    ds, ax
 	mov	    ss, ax
 	mov	    es, ax
-	mov	    esp, 8000h		; stack begins from 90000h
+	mov	    esp, 8000h			; stack begins from 90000h
 
 	call	InitVideo
 
 	call	InitPaging
 
-    mov     ebx,LOGO
+    mov     ebx, LOGO
     call    print_string_pm
+
+	cld
+   	mov    	esi, 0X500
+   	mov		edi, 0XC0000400
+   	mov		ecx, 1024
+   	rep		movsd                   ; copy image to its protected mode address
+
+	push 0xc0000400
+	ret
 
     jmp     $
 
@@ -165,13 +261,13 @@ print_string_pm_done:
 ; 31:12         Physical address of the 4-KByte page referenced by this entry
 
 ; page directory table
-%define		PAGE_DIR_CR3		0x80000
+%define		PAGE_DIR_CR3		0x90000
 
 ; 0th page table. Address must be 4KB aligned
-%define		PAGE_TABLE_0		0x81000
+%define		PAGE_TABLE_0		0x91000
 
 ; 768th page table. Address must be 4KB aligned
-%define		PAGE_TABLE_768		0x82000
+%define		PAGE_TABLE_768		0x92000
 
 ; each page table has 1024 entries
 %define		PAGE_TABLE_ENTRIES	1024
@@ -243,4 +339,52 @@ InitPaging:
 	popa
 	ret
 
-times   1048576-($-$$)  db  0xcc 
+times   3584-($-$$)  db  0xcc
+
+
+
+; [CHS]
+; Reading or writing an ATA hard disk in Real Mode with CHS addressing is precisely the same as doing the same operation on a floppy drive. Also remember that there are severe addressing limitations with CHS addressing. Typically only the first 8 GB of the media can be accessed, at most. And when you read from USB (as floppy), 1440 KB is the most.
+
+; [Converting LBA to CHS]
+; The addresses of interesting sectors on a disk are almost always calculated as LBAs, but some drives (especially USB flash drives doing floppy emulation) cannot use LBA addressing. So your code must translate the address, and use a CHS read call. This also applies if you are trying to read floppies and hard disks with the same code.
+
+; [Quick Explanation of the Algorithm]
+; You can think of a CHS address as the digits of a 3-digit number. The sectors are the low digit, the heads are the middle digit, and cylinders are the high digit. As an analogy, think of the decimal number 345. To extract the low (sectors) digit, you take the modulo with 10. 345 % 10 = 5. You also need the integer result of 345 / 10 to calculate the heads and cylinders. 345 / 10 = 34. Then %10 again gets the head, and /10 gets the cylinder. The nice thing is that all CPU chips have "div" opcodes that give you both the result and the modulus for every operation.
+
+; [The Algorithm]
+; LBA is the input value,
+; Temp = LBA / (Sectors per Track)
+; Sector = (LBA % (Sectors per Track)) + 1
+; Head = Temp % (Number of Heads)
+; Cylinder = Temp / (Number of Heads)
+; Note: Always remember that Sector is 1-based, and not 0-based ... this detail causes many problems.
+
+;=================================================================
+
+; Getting Sectors/Track, Total Head values
+; There is only one real place where you can get the "Sectors per Track" and "Number of Heads" values for the previous LBA->CHS calculation. All modern BIOSes use automatic CHS to LBA conversions internally, with internal hardcoded conversion values. They do not use the "real" CHS values that are written on the drive's label. Also, if you perhaps have a FAT formatted drive, it will claim to have "Sectors per Track" and "Number of Heads" information stored in the BPB. These values are almost always wrong.
+
+; If the 0x80 bit is set for the BIOS drive number, then you have no real choice other than to use the INT13h AH=8 BIOS function to get the "drive geometry".
+
+; Set AH to 8, DL to the BIOS drive number, and execute INT 0x13.
+; The value returned in DH is the "Number of Heads" -1.
+; AND the value returned in CL with 0x3f to get the "Sectors per Track".
+; Note: INT0x13 AH=8 does not seem to work well with floppy drives, or emulated floppy drives. It may be best to use default values in that case.
+
+; Reading sectors with a CHS address
+; Cylinder = 0 to 1023 (maybe 4095), Head = 0 to 15 (maybe 254, maybe 255), Sector = 1 to 63
+
+; Set AH = 2
+; AL = total sector count (0 is illegal) -- cannot cross ES page boundary, or a cylinder boundary, and must be < 128
+; CH = cylinder & 0xff
+; CL = Sector | ((cylinder >> 2) & 0xC0);
+; DH = Head -- may include two more cylinder bits
+; ES:BX -> buffer
+; Set DL = "drive number" -- typically 0x80, for the "C" drive
+; Issue an INT 0x13.
+; The carry flag will be set if there is any error during the read. AH should be set to 0 on success.
+
+; To write: set AH to 3, instead.
+
+; Note: The limitation about not crossing cylinder boundaries is very annoying, especially when combined with the 127 sector limit -- because the arithmetic for the length and "start CHS" of the next consecutive read or write gets messy. The simplest workaround is to read or write only one sector at a time in CHS mode. Not all BIOSes have these two limitations, of course, but it is necessary to program for the "lowest common denominator".

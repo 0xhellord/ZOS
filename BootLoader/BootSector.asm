@@ -9,7 +9,7 @@ org 0x7c00
 jmp start
 
 TestMsg db "returned from loader??", 0xd, 0xa, 0
-IOError db "Disk IO Failed", 0xd , 0xa , 0
+IOError db "Disk IO Failed:BootSec", 0xd , 0xa , 0
 LogoStr db "................", 0xd, 0xa,  0xd, 0xa, "ZhaZha BootLoader - 20200922", 0
 
 start:
@@ -18,7 +18,7 @@ start:
     mov     ds, ax
     mov     ss, ax
     mov     es, ax
-    mov     sp, 0x8000
+    mov     sp, 0x80000
     sti
     
     call    PrintEndLine
@@ -26,7 +26,7 @@ start:
     push    LogoStr
     call    PrintString
 
-    mov     al,0xa
+    mov     al,0x7
     mov     cl,2
     mov     bx,0x8000
     call    ReadSector
