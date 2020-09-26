@@ -18,7 +18,7 @@ start:
     mov     ds, ax
     mov     ss, ax
     mov     es, ax
-    mov     sp, 0x80000
+    mov     sp, 0x8000
     sti
     
     call    PrintEndLine

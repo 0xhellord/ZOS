@@ -1,4 +1,27 @@
+
+; [[内存布局]]
+
+; ;实模式可用区域:
+; ; start         end         size            description type
+; ; 0x00000500    0x00007BFF  ~30 KiB         Conventional memory usable memory   (这一段可用)
+; ; 0x00007E00    0x0007FFFF  480.5 KiB       Conventional memory   (这一段可用)
+; ; 0x00080000    0x0009FFFF  128 KiB         EBDA (Extended BIOS Data Area)  partially used by the EBDA  (这一段可用, 但具体多少取决于BDA:413)
+
+; BootSector使用:
+; 加载在 0x7C00 , 占512字节
+; 使用0x8000作为栈
+
+; KernelLoader:
+; 加载在0x8000 (由bootSector从磁盘读取, 然后跳过来执行)
+; 0x500作为加载内核读盘的buffer;
+; 0XC0000400为内核加载虚拟地址
+; 8000h作为栈
+
+
 [bits 16]
+
+;//实模式int13 读盘缓冲区
+INT13_RM_MODE_BUFFER equ 0x500
 
 org 0x8000
 
@@ -18,6 +41,224 @@ IOError     	db "Disk IO Failed:Loader CHS", 0xd , 0xa , 0
 ;; Output: CF = 1 if error                  ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+gdtinfo1:
+   dw gdt_end1 - gdt1 - 1   ;last byte in table
+   dd gdt1                 ;start of table
+ 
+gdt1         dd 0,0        ; entry 0 is always unused
+flatdesc    db 0xff, 0xff, 0, 0, 0, 10010010b, 11001111b, 0
+gdt_end1:
+
+start:
+    xor     ax, ax
+    mov     ds, ax
+    mov     ss, ax
+    mov     es, ax
+    mov     sp, 0x8000
+    push        LOGO
+    call        PrintString
+
+   push ds                ; save real mode
+   PUSH ES
+   call        EnableA20
+   lgdt [gdtinfo1]         ; load gdt register
+ 
+   mov  eax, cr0          ; switch to pmode by
+   or al,1                ; set pmode bit
+   mov  cr0, eax
+ 
+   jmp $+2                ; tell 386/486 to not crash
+ 
+   mov  bx, 0x08          ; select descriptor 1
+   mov  ds, bx            ; 8h = 1000b
+   mov  es, bx
+ 
+   and al,0xFE            ; back to realmode
+   mov  cr0, eax          ; by toggling bit again
+    POP ES
+   pop ds                 ; get back old segment
+ 
+   mov bx, 0x0f01         ; attrib/char of smiley
+   mov eax, 0x0b8000      ; note 32 bit offset
+   mov word [ds:eax], bx
+
+    push        LOGO
+    call        PrintString
+
+LOOP_READ_KERNEL:
+
+	;mov			dl, BootDriveNum
+	mov			bx, INT13_RM_MODE_BUFFER			;buffer
+	mov			Eax, 0x8			;LBA
+	mov			cx, 0X4				;sector count;
+	call		ReadSectorLBA
+    push        LOGO
+    call        PrintString
+
+     cld
+    	mov    	esi, INT13_RM_MODE_BUFFER
+    	mov		edi, 0X100400
+    	mov		ecx, 2048
+    	a32     rep		movsb                   ; copy image to its protected mode address
+
+
+	push        LOGO
+    call        PrintString
+    ;call        EnableA20
+    call        InitGDT
+
+    cli	                                    ; clear interrupts
+	mov	        eax, cr0                    ; set bit 0 in cr0--enter pmode
+	or	        eax, 1
+	mov	        cr0, eax
+    jmp         CODE_SEG:PMMODE
+
+
+
+
+
+[bits 32]
+
+KERNEL_VIR_BASE equ 0XC0000400
+KERNEL_SIZE		equ 2048
+PM_MODE_STACK	equ 8000h
+
+PMMODE:
+    mov	    ax, DATA_SEG		; set data segments to data selector (0x10)
+	mov	    ds, ax
+	mov	    ss, ax
+	mov	    es, ax
+	mov	    esp, PM_MODE_STACK			; stack begins from 90000h
+
+	call	InitVideo
+
+	call	InitPaging
+
+    mov     ebx, LOGO
+    call    print_string_pm
+
+
+	mov eax, 	KERNEL_VIR_BASE
+	jmp eax
+
+    jmp     $
+
+InitVideo:
+
+	pusha
+	cld
+	mov	edi, VIDEO_MEMORY
+	mov	cx, 2000
+	mov	ah, 14
+	mov	al, ' '	
+	rep	stosw
+	popa
+	ret
+
+VIDEO_MEMORY equ 0xb8000
+WHITE_ON_BLACK equ 0x0A ; the color byte for each character
+
+print_string_pm:
+    pusha
+    mov edx, VIDEO_MEMORY
+
+print_string_pm_loop:
+    mov al, [ebx] ; [ebx] is the address of our character
+    mov ah, WHITE_ON_BLACK
+
+    cmp al, 0 ; check if end of string
+    je print_string_pm_done
+
+    mov [edx], ax ; store character + attribute in video memory
+    add ebx, 1 ; next char
+    add edx, 2 ; next video memory position
+
+    jmp print_string_pm_loop
+
+print_string_pm_done:
+    popa
+    ret
+
+; page directory table
+%define		PAGE_DIR_CR3		0x90000
+
+; 0th page table. Address must be 4KB aligned
+%define		PAGE_TABLE_0		0x91000
+
+; 768th page table. Address must be 4KB aligned
+%define		PAGE_TABLE_768		0x92000
+
+; each page table has 1024 entries
+%define		PAGE_TABLE_ENTRIES	1024
+
+; attributes (page is present;page is writable; supervisor mode)
+%define		PRIV				3
+
+;****************************************
+;	Enable Paging
+;****************************************
+
+InitPaging:
+	pusha										; save stack frame
+
+	;------------------------------------------
+	;	idenitity map 1st page table (4MB)
+	;------------------------------------------
+
+	mov		eax, PAGE_TABLE_0					; first page table
+	mov		ebx, 0x0 | PRIV						; starting physical address of page
+	mov		ecx, PAGE_TABLE_ENTRIES				; for every page in table...
+.loop:
+	mov		dword [eax], ebx					; write the entry
+	add		eax, 4								; go to next page entry in table (Each entry is 4 bytes)
+	add		ebx, 4096							; go to next page address (Each page is 4Kb)
+	loop	.loop								; go to next entry
+
+	;------------------------------------------
+	;	map the 768th table to physical addr 1MB
+	;	the 768th table starts the 3gb virtual address
+	;------------------------------------------
+ 
+	mov		eax, PAGE_TABLE_768				; first page table
+	mov		ebx, 0x100000 | PRIV			; starting physical address of page
+	mov		ecx, PAGE_TABLE_ENTRIES			; for every page in table...
+.loop2:
+	mov		dword [eax], ebx				; write the entry
+	add		eax, 4							; go to next page entry in table (Each entry is 4 bytes)
+	add		ebx, 4096						; go to next page address (Each page is 4Kb)
+	loop	.loop2							; go to next entry
+
+	;------------------------------------------
+	;	set up the entries in the directory table
+	;------------------------------------------
+
+	mov		eax, PAGE_TABLE_0 | PRIV			; 1st table is directory entry 0
+	mov		dword [PAGE_DIR_CR3], eax
+
+	mov		eax, PAGE_TABLE_768 | PRIV			; 768th entry in directory table
+	mov		dword [PAGE_DIR_CR3+(768*4)], eax
+
+	;------------------------------------------
+	;	install directory table
+	;------------------------------------------
+
+	mov		eax, PAGE_DIR_CR3
+	mov		cr3, eax
+
+	;------------------------------------------
+	;	enable paging
+	;------------------------------------------
+
+	mov		eax, cr0
+	or		eax, 0x80000000
+	mov		cr0, eax
+
+
+
+	popa
+	ret
+
+[bits 16]
 ReadSectorLBA:
         pushad
 
@@ -138,90 +379,90 @@ LBAToCHS:
 	RET								; Return to the main function
 
 
-%include    "protectmode.asm"
+EnableA20:
 
-start:
-    push        LOGO
-    call        PrintString
+    cli
 
-	;mov			dl, BootDriveNum
-	mov			bx, 0x500			;buffer
-	mov			Eax, 0x8			;LBA
-	mov			cx, 0X2				;sector count;
-	call		ReadSectorLBA
-	push        LOGO
-    call        PrintString
-    call        EnableA20
-    call        InitGDT
+    call    a20wait
+    mov     al,0xAD
+    out     0x64,al
 
-    cli	                                    ; clear interrupts
-	mov	        eax, cr0                    ; set bit 0 in cr0--enter pmode
-	or	        eax, 1
-	mov	        cr0, eax
-    jmp         CODE_SEG:PMMODE
+    call    a20wait
+    mov     al,0xD0
+    out     0x64,al
 
-[bits 32]
-PMMODE:
-    mov	    ax, DATA_SEG		; set data segments to data selector (0x10)
-	mov	    ds, ax
-	mov	    ss, ax
-	mov	    es, ax
-	mov	    esp, 8000h			; stack begins from 90000h
+    call    a20wait2
+    in      al,0x60
+    push    eax
 
-	call	InitVideo
+    call    a20wait
+    mov     al,0xD1
+    out     0x64,al
 
-	call	InitPaging
+    call    a20wait
+    pop     eax
+    or      al,2
+    out     0x60,al
 
-    mov     ebx, LOGO
-    call    print_string_pm
+    call    a20wait
+    mov     al,0xAE
+    out     0x64,al
 
-	cld
-   	mov    	esi, 0X500
-   	mov		edi, 0XC0000400
-   	mov		ecx, 1024
-   	rep		movsd                   ; copy image to its protected mode address
-
-	push 0xc0000400
-	ret
-
-    jmp     $
-
-InitVideo:
-
-	pusha
-	cld
-	mov	edi, 0xb8000
-	mov	cx, 2000
-	mov	ah, 14
-	mov	al, ' '	
-	rep	stosw
-	popa
-	ret
-
-VIDEO_MEMORY equ 0xb8000
-WHITE_ON_BLACK equ 0x0A ; the color byte for each character
-
-print_string_pm:
-    pusha
-    mov edx, VIDEO_MEMORY
-
-print_string_pm_loop:
-    mov al, [ebx] ; [ebx] is the address of our character
-    mov ah, WHITE_ON_BLACK
-
-    cmp al, 0 ; check if end of string
-    je print_string_pm_done
-
-    mov [edx], ax ; store character + attribute in video memory
-    add ebx, 1 ; next char
-    add edx, 2 ; next video memory position
-
-    jmp print_string_pm_loop
-
-print_string_pm_done:
-    popa
+    call    a20wait
+    sti
     ret
 
+a20wait:
+    in      al,0x64
+    test    al,2
+    jnz     a20wait
+    ret
+
+
+a20wait2:
+    in      al,0x64
+    test    al,1
+    jz      a20wait2
+    ret
+
+
+gdt_start:
+    dd 0x0
+    dd 0x0
+
+gdt_code: 
+    dw 0xFFFF
+    dw 0x0
+    db 0x0
+    db 10011010b
+    db 11001111b
+    db 0x0       
+
+gdt_data:
+    dw 0xFFFF
+    dw 0x0
+    db 0x0
+    db 10010010b
+    db 11001111b
+    db 0x0
+
+gdt_end:
+
+gdt_descriptor:
+    dw gdt_end - gdt_start - 1 
+    dd gdt_start
+
+CODE_SEG equ gdt_code - gdt_start
+DATA_SEG equ gdt_data - gdt_start
+
+
+InitGDT:
+	cli                  
+	pusha
+	lgdt 	[gdt_descriptor]
+	sti
+	popa
+	ret
 
 ; CR3寄存器结构; 拷贝自intel SDM
 ;[Table 4-3.  Use of CR3 with 32-Bit Paging]
@@ -260,84 +501,7 @@ print_string_pm_done:
 ; 11:9          Ignored
 ; 31:12         Physical address of the 4-KByte page referenced by this entry
 
-; page directory table
-%define		PAGE_DIR_CR3		0x90000
 
-; 0th page table. Address must be 4KB aligned
-%define		PAGE_TABLE_0		0x91000
-
-; 768th page table. Address must be 4KB aligned
-%define		PAGE_TABLE_768		0x92000
-
-; each page table has 1024 entries
-%define		PAGE_TABLE_ENTRIES	1024
-
-; attributes (page is present;page is writable; supervisor mode)
-%define		PRIV				3
-
-;****************************************
-;	Enable Paging
-;****************************************
-
-InitPaging:
-	pusha										; save stack frame
-
-	;------------------------------------------
-	;	idenitity map 1st page table (4MB)
-	;------------------------------------------
-
-	mov		eax, PAGE_TABLE_0					; first page table
-	mov		ebx, 0x0 | PRIV						; starting physical address of page
-	mov		ecx, PAGE_TABLE_ENTRIES				; for every page in table...
-.loop:
-	mov		dword [eax], ebx					; write the entry
-	add		eax, 4								; go to next page entry in table (Each entry is 4 bytes)
-	add		ebx, 4096							; go to next page address (Each page is 4Kb)
-	loop	.loop								; go to next entry
-
-	;------------------------------------------
-	;	map the 768th table to physical addr 1MB
-	;	the 768th table starts the 3gb virtual address
-	;------------------------------------------
- 
-	mov		eax, PAGE_TABLE_768				; first page table
-	mov		ebx, 0x100000 | PRIV			; starting physical address of page
-	mov		ecx, PAGE_TABLE_ENTRIES			; for every page in table...
-.loop2:
-	mov		dword [eax], ebx				; write the entry
-	add		eax, 4							; go to next page entry in table (Each entry is 4 bytes)
-	add		ebx, 4096						; go to next page address (Each page is 4Kb)
-	loop	.loop2							; go to next entry
-
-	;------------------------------------------
-	;	set up the entries in the directory table
-	;------------------------------------------
-
-	mov		eax, PAGE_TABLE_0 | PRIV			; 1st table is directory entry 0
-	mov		dword [PAGE_DIR_CR3], eax
-
-	mov		eax, PAGE_TABLE_768 | PRIV			; 768th entry in directory table
-	mov		dword [PAGE_DIR_CR3+(768*4)], eax
-
-	;------------------------------------------
-	;	install directory table
-	;------------------------------------------
-
-	mov		eax, PAGE_DIR_CR3
-	mov		cr3, eax
-
-	;------------------------------------------
-	;	enable paging
-	;------------------------------------------
-
-	mov		eax, cr0
-	or		eax, 0x80000000
-	mov		cr0, eax
-
-
-
-	popa
-	ret
 
 times   3584-($-$$)  db  0xcc
 
