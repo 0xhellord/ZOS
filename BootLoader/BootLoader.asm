@@ -32,75 +32,75 @@ BootDriveNum	db 0
 LOGO        	db "loader!!", 0
 IOErrorLBA     	db "Disk IO Failed:Loader LBA", 0xd , 0xa , 0
 IOError     	db "Disk IO Failed:Loader CHS", 0xd , 0xa , 0
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Reads a sector using BIOS Int 13h fn 42h ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;; Input:  EAX 		= LBA                   ;;
-;;         CX    	= sector count          ;;
-;;         ES:BX 	-> buffer address       ;;
-;; Output: CF = 1 if error                  ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-gdtinfo1:
-   dw gdt_end1 - gdt1 - 1   ;last byte in table
-   dd gdt1                 ;start of table
+
+gdtinfo_unrealmode:
+   dw gdtinfo_unrealmode_end - gdt_null_seg - 1     ;last byte in table
+   dd gdt_null_seg                                  ;start of table
  
-gdt1         dd 0,0        ; entry 0 is always unused
-flatdesc    db 0xff, 0xff, 0, 0, 0, 10010010b, 11001111b, 0
-gdt_end1:
+gdt_null_seg    dd 0,0                             ; entry 0 is always unused
+gdt_data_seg    db 0xff, 0xff, 0, 0, 0, 10010010b, 11001111b, 0
+gdtinfo_unrealmode_end:
 
 start:
-    xor     ax, ax
-    mov     ds, ax
-    mov     ss, ax
-    mov     es, ax
-    mov     sp, 0x8000
+    xor         ax, ax
+    mov         ds, ax
+    mov         ss, ax
+    mov         es, ax
+    mov         sp, 0x8000
     push        LOGO
     call        PrintString
 
-   push ds                ; save real mode
-   PUSH ES
-   call        EnableA20
-   lgdt [gdtinfo1]         ; load gdt register
+    push        ds                ; save real mode
+    push        es
+    call        EnableA20
+    lgdt        [gdtinfo_unrealmode]         ; load gdt register
  
-   mov  eax, cr0          ; switch to pmode by
-   or al,1                ; set pmode bit
-   mov  cr0, eax
- 
-   jmp $+2                ; tell 386/486 to not crash
- 
-   mov  bx, 0x08          ; select descriptor 1
-   mov  ds, bx            ; 8h = 1000b
-   mov  es, bx
- 
-   and al,0xFE            ; back to realmode
-   mov  cr0, eax          ; by toggling bit again
-    POP ES
-   pop ds                 ; get back old segment
- 
-   mov bx, 0x0f01         ; attrib/char of smiley
-   mov eax, 0x0b8000      ; note 32 bit offset
-   mov word [ds:eax], bx
+    mov         eax, cr0          ; switch to pmode by
+    or          al, 1                ; set pmode bit
+    mov         cr0, eax
+    
+    jmp         $+2                ; tell 386/486 to not crash
+    
+    mov         bx, 0x08          ; select descriptor 1
+    mov         ds, bx            ; 8h = 1000b
+    mov         es, bx
+    
+    and         al, 0xFE            ; back to realmode
+    mov         cr0, eax          ; by toggling bit again
+    pop         es
+    pop         ds                 ; get back old segment
+    
 
     push        LOGO
     call        PrintString
 
+    mov         ecx, KERNEL_SECTOR_LBA_COUNT
 LOOP_READ_KERNEL:
-
-	;mov			dl, BootDriveNum
-	mov			bx, INT13_RM_MODE_BUFFER			;buffer
-	mov			Eax, 0x8			;LBA
-	mov			cx, 0X4				;sector count;
+ 
+	mov			dl,  [BootDriveNum]
+	mov			bx,  INT13_RM_MODE_BUFFER			;buffer
+    mov         eax, KERNEL_SECTOR_LBA_COUNT
+    sub         eax, ecx
+    add         eax, KERNEL_SECTOR_LBA_BEGIN
+    push        ecx
+	mov			cx,  1				;sector count;
 	call		ReadSectorLBA
-    push        LOGO
-    call        PrintString
+    pop         ecx
+    push        ecx
+    cld
+    mov    	    esi, INT13_RM_MODE_BUFFER
+    mov         edi, KERNEL_SECTOR_LBA_COUNT
+    sub         edi, ecx
+    mov         eax, 512
+    mul         edi
+    mov         edi, EAX
+    lea         edi, [ edi + KERNEL_PHY_BASE + KERNEL_CODE_OFFSET ]
+    mov		    ecx, 512
+    a32         rep	 movsb                   ; copy image to its protected mode address
+    pop         ecx
 
-     cld
-    	mov    	esi, INT13_RM_MODE_BUFFER
-    	mov		edi, 0X100400
-    	mov		ecx, 2048
-    	a32     rep		movsb                   ; copy image to its protected mode address
-
+    loop        LOOP_READ_KERNEL
 
 	push        LOGO
     call        PrintString
@@ -111,69 +111,69 @@ LOOP_READ_KERNEL:
 	mov	        eax, cr0                    ; set bit 0 in cr0--enter pmode
 	or	        eax, 1
 	mov	        cr0, eax
-    jmp         CODE_SEG:PMMODE
-
-
-
-
+    jmp         CODE_SEG:PMENTRY
 
 [bits 32]
 
-KERNEL_VIR_BASE equ 0XC0000400
-KERNEL_SIZE		equ 2048
-PM_MODE_STACK	equ 8000h
+KERNEL_VIR_BASE         equ 0XC0000400
+KERNEL_SIZE		        equ (1024*1024)
+PM_MODE_STACK	        equ 8000h
+KERNEL_SECTOR_LBA_COUNT equ (KERNEL_SIZE/512)
+KERNEL_SECTOR_LBA_BEGIN equ 8
+KERNEL_PHY_BASE         equ 0x100000
+KERNEL_CODE_OFFSET      equ 0x400
 
-PMMODE:
-    mov	    ax, DATA_SEG		; set data segments to data selector (0x10)
-	mov	    ds, ax
-	mov	    ss, ax
-	mov	    es, ax
-	mov	    esp, PM_MODE_STACK			; stack begins from 90000h
+PMENTRY:
+    mov	        ax, DATA_SEG		; set data segments to data selector (0x10)
+	mov	        ds, ax
+	mov	        ss, ax
+	mov	        es, ax
+	mov	        esp, PM_MODE_STACK			; stack begins from 90000h
 
-	call	InitVideo
+	call	    InitVideo
 
-	call	InitPaging
+	call	    InitPaging
 
-    mov     ebx, LOGO
-    call    print_string_pm
+    mov         ebx, LOGO
+    call        print_string_pm
 
 
-	mov eax, 	KERNEL_VIR_BASE
-	jmp eax
+	mov         eax, KERNEL_VIR_BASE
+	jmp         eax
 
-    jmp     $
+    jmp         $
 
-InitVideo:
+InitVideo:  
 
-	pusha
-	cld
-	mov	edi, VIDEO_MEMORY
-	mov	cx, 2000
-	mov	ah, 14
-	mov	al, ' '	
-	rep	stosw
+	pusha   
+	cld 
+	mov	        edi, VIDEO_MEMORY
+	mov	        cx, 2000
+	mov	        ah, 14
+	mov	        al, ' '	
+	rep	        stosw
 	popa
 	ret
 
-VIDEO_MEMORY equ 0xb8000
-WHITE_ON_BLACK equ 0x0A ; the color byte for each character
+VIDEO_MEMORY    equ 0xb8000
+WHITE_ON_BLACK  equ 0x0A ; the color byte for each character
 
 print_string_pm:
     pusha
-    mov edx, VIDEO_MEMORY
+    mov         edx, VIDEO_MEMORY
 
 print_string_pm_loop:
-    mov al, [ebx] ; [ebx] is the address of our character
-    mov ah, WHITE_ON_BLACK
+    mov         al, [ebx] ; [ebx] is the address of our character
+    mov         ah, WHITE_ON_BLACK
 
-    cmp al, 0 ; check if end of string
-    je print_string_pm_done
+    cmp         al, 0 ; check if end of string
+    je          print_string_pm_done
 
-    mov [edx], ax ; store character + attribute in video memory
-    add ebx, 1 ; next char
-    add edx, 2 ; next video memory position
+    mov         [edx], ax ; store character + attribute in video memory
+    add         ebx, 1 ; next char
+    add         edx, 2 ; next video memory position
 
-    jmp print_string_pm_loop
+    jmp         print_string_pm_loop
 
 print_string_pm_done:
     popa
@@ -194,6 +194,7 @@ print_string_pm_done:
 ; attributes (page is present;page is writable; supervisor mode)
 %define		PRIV				3
 
+PAGES_IZE       equ     4096
 ;****************************************
 ;	Enable Paging
 ;****************************************
@@ -205,53 +206,53 @@ InitPaging:
 	;	idenitity map 1st page table (4MB)
 	;------------------------------------------
 
-	mov		eax, PAGE_TABLE_0					; first page table
-	mov		ebx, 0x0 | PRIV						; starting physical address of page
-	mov		ecx, PAGE_TABLE_ENTRIES				; for every page in table...
-.loop:
-	mov		dword [eax], ebx					; write the entry
-	add		eax, 4								; go to next page entry in table (Each entry is 4 bytes)
-	add		ebx, 4096							; go to next page address (Each page is 4Kb)
-	loop	.loop								; go to next entry
+	mov		    eax, PAGE_TABLE_0					; first page table
+	mov		    ebx, 0x0 | PRIV						; starting physical address of page
+	mov		    ecx, PAGE_TABLE_ENTRIES				; for every page in table...
+.loop:  
+	mov		    dword [eax], ebx					; write the entry
+	add		    eax, 4								; go to next page entry in table (Each entry is 4 bytes)
+	add		    ebx, PAGES_IZE						; go to next page address (Each page is 4Kb)
+	loop	    .loop								; go to next entry
 
 	;------------------------------------------
 	;	map the 768th table to physical addr 1MB
 	;	the 768th table starts the 3gb virtual address
 	;------------------------------------------
- 
-	mov		eax, PAGE_TABLE_768				; first page table
-	mov		ebx, 0x100000 | PRIV			; starting physical address of page
-	mov		ecx, PAGE_TABLE_ENTRIES			; for every page in table...
-.loop2:
-	mov		dword [eax], ebx				; write the entry
-	add		eax, 4							; go to next page entry in table (Each entry is 4 bytes)
-	add		ebx, 4096						; go to next page address (Each page is 4Kb)
-	loop	.loop2							; go to next entry
+    
+	mov		    eax, PAGE_TABLE_768				; first page table
+	mov		    ebx, KERNEL_PHY_BASE | PRIV			; starting physical address of page
+	mov		    ecx, PAGE_TABLE_ENTRIES			; for every page in table...
+.loop2: 
+	mov		    dword [eax], ebx				; write the entry
+	add		    eax, 4							; go to next page entry in table (Each entry is 4 bytes)
+	add		    ebx, PAGES_IZE  				; go to next page address (Each page is 4Kb)
+	loop	    .loop2							; go to next entry
 
 	;------------------------------------------
 	;	set up the entries in the directory table
 	;------------------------------------------
 
-	mov		eax, PAGE_TABLE_0 | PRIV			; 1st table is directory entry 0
-	mov		dword [PAGE_DIR_CR3], eax
+	mov		    eax, PAGE_TABLE_0 | PRIV			; 1st table is directory entry 0
+	mov		    dword [PAGE_DIR_CR3], eax
 
-	mov		eax, PAGE_TABLE_768 | PRIV			; 768th entry in directory table
-	mov		dword [PAGE_DIR_CR3+(768*4)], eax
+	mov		    eax, PAGE_TABLE_768 | PRIV			; 768th entry in directory table
+	mov		    dword [PAGE_DIR_CR3+(768*4)], eax
 
 	;------------------------------------------
 	;	install directory table
 	;------------------------------------------
 
-	mov		eax, PAGE_DIR_CR3
-	mov		cr3, eax
+	mov		    eax, PAGE_DIR_CR3
+	mov		    cr3, eax
 
 	;------------------------------------------
 	;	enable paging
 	;------------------------------------------
 
-	mov		eax, cr0
-	or		eax, 0x80000000
-	mov		cr0, eax
+	mov		    eax, cr0
+	or		    eax, 0x80000000
+	mov		    cr0, eax
 
 
 
@@ -259,6 +260,15 @@ InitPaging:
 	ret
 
 [bits 16]
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Reads a sector using BIOS Int 13h fn 42h ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Input:  EAX 		= LBA                   ;;
+;;         CX    	= sector count          ;;
+;;         ES:BX 	-> buffer address       ;;
+;; Output: CF = 1 if error                  ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ReadSectorLBA:
         pushad
 
