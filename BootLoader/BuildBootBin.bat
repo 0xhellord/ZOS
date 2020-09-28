@@ -17,6 +17,6 @@ del /Q ..\bin\BootImg.img
 rem copy  /B /Y ..\bin\Boot-0-Sector.bin + ..\bin\Boot-1-Loader.bin + ..\bin\Boot-2-Kernel.bin+ ..\tool\objcopy.exe ..\bin\BootImg.img
 rem C:\qemu\qemu-system-i386.exe  -drive format=raw,file=..\bin\BootImg.img
 
-..\tool\Bochs-2.6.11\bochsdbg.exe  -rc bochsdbg.txt -f bochsrc.bxrc -q -unlock
+..\tool\Bochs-2.6.11\bochsdbg.exe -f bochsrc.bxrc -q -unlock
 pause
 goto BUILD
