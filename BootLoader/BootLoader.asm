@@ -24,30 +24,18 @@
 INT13_RM_MODE_BUFFER equ 0x500
 
 org 0x8000
+    xchg        bx, bx
+    jmp start
 
-mov				[BootDriveNum], dl
-jmp start
-
-BootDriveNum	db 0
-LOGO        	db "loader!!", 0
-IOErrorLBA     	db "Disk IO Failed:Loader LBA", 0xd , 0xa , 0
-IOError     	db "Disk IO Failed:Loader CHS", 0xd , 0xa , 0
-
-
-gdtinfo_unrealmode:
-   dw gdtinfo_unrealmode_end - gdt_null_seg - 1     ;last byte in table
-   dd gdt_null_seg                                  ;start of table
- 
-gdt_null_seg    dd 0,0                             ; entry 0 is always unused
-gdt_data_seg    db 0xff, 0xff, 0, 0, 0, 10010010b, 11001111b, 0
-gdtinfo_unrealmode_end:
 
 start:
     xor         ax, ax
     mov         ds, ax
     mov         ss, ax
     mov         es, ax
+    mov         fs, ax
     mov         sp, 0x8000
+    mov			[BootDriveNum], dl
     push        LOGO
     call        PrintString
 
@@ -83,9 +71,13 @@ LOOP_READ_KERNEL:
     mov         eax, KERNEL_SECTOR_LBA_COUNT
     sub         eax, ecx
     add         eax, KERNEL_SECTOR_LBA_BEGIN
+    
     push        ecx
-	mov			cx,  1				;sector count;
+	
+    mov			cx,  1				;sector count;
 	call		ReadSectorLBA
+
+
     pop         ecx
     push        ecx
     cld
@@ -95,7 +87,7 @@ LOOP_READ_KERNEL:
     mov         eax, 512
     mul         edi
     mov         edi, EAX
-    lea         edi, [ edi + KERNEL_PHY_BASE + KERNEL_CODE_OFFSET ]
+    lea         edi, [ edi + KERNEL_PHY_BASE ]
     mov		    ecx, 512
     a32         rep	 movsb                   ; copy image to its protected mode address
     pop         ecx
@@ -104,7 +96,7 @@ LOOP_READ_KERNEL:
 
 	push        LOGO
     call        PrintString
-    ;call        EnableA20
+    call        EnableA20
     call        InitGDT
 
     cli	                                    ; clear interrupts
@@ -115,13 +107,12 @@ LOOP_READ_KERNEL:
 
 [bits 32]
 
-KERNEL_VIR_BASE         equ 0XC0000400
+KERNEL_VIR_BASE         equ 0XC0000000
 KERNEL_SIZE		        equ (1024*1024)
 PM_MODE_STACK	        equ 8000h
 KERNEL_SECTOR_LBA_COUNT equ (KERNEL_SIZE/512)
 KERNEL_SECTOR_LBA_BEGIN equ 8
 KERNEL_PHY_BASE         equ 0x100000
-KERNEL_CODE_OFFSET      equ 0x400
 
 PMENTRY:
     mov	        ax, DATA_SEG		; set data segments to data selector (0x10)
@@ -129,18 +120,23 @@ PMENTRY:
 	mov	        ss, ax
 	mov	        es, ax
 	mov	        esp, PM_MODE_STACK			; stack begins from 90000h
-
+    ;jmp         $
 	call	    InitVideo
 
 	call	    InitPaging
-
+    
     mov         ebx, LOGO
     call        print_string_pm
 
-
-	mov         eax, KERNEL_VIR_BASE
-	jmp         eax
-
+    xchg        bx, bx
+	push        KERNEL_VIR_BASE
+    call        GetPEEntry
+    cmp         eax, 0
+    je          ERROR_KERNEL_ENTRY
+    jmp         eax
+ERROR_KERNEL_ENTRY:
+    mov         ebx, ERROR_ENTRY
+    call        print_string_pm
     jmp         $
 
 InitVideo:  
@@ -259,6 +255,48 @@ InitPaging:
 	popa
 	ret
 
+GetPEEntry:
+    push        ebp  
+    mov         ebp,esp  
+    sub         esp,48h  
+    push        ebx  
+    push        esi  
+    push        edi  
+
+    mov         eax,dword [ebp+8]  
+    mov         dword [ebp-4],eax  
+    mov         eax,dword [ebp-4]  
+    movzx       ecx,word [eax]  
+
+    cmp         ecx,5A4Dh  
+    jne         ERROR_RET  
+
+    mov         eax,dword [ebp-4]  
+    mov         ecx,dword [ebp-4]  
+    add         ecx,dword [eax+3Ch]  
+    mov         dword [ebp-8],ecx
+    mov         eax,dword [ebp-8]  
+
+    cmp         dword [eax],4550h  
+    jne         ERROR_RET  
+
+    mov         eax,dword [ebp-8]  
+    mov         ecx,dword [ebp+8]  
+    add         ecx,dword [eax+28h]  
+    mov         eax,ecx  
+    jmp         RET  
+
+ERROR_RET:
+    xor         eax,eax
+
+RET:
+    pop         edi  
+    pop         esi  
+    pop         ebx  
+    mov         esp,ebp  
+    pop         ebp  
+    ret         4  
+
 [bits 16]
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -358,7 +396,7 @@ PrintString:
         jmp     REPEAT
 
     END:
-        call    PrintEndLine
+    ;call    PrintEndLine
     pop     si
     ret     2
 
@@ -474,6 +512,21 @@ InitGDT:
 	popa
 	ret
 
+
+BootDriveNum	db 0
+LOGO        	db "loader!!", 0
+IOErrorLBA     	db "Disk IO Failed:Loader LBA", 0xd , 0xa , 0
+IOError     	db "Disk IO Failed:Loader CHS", 0xd , 0xa , 0
+ERROR_ENTRY     db "Error get kernel entry!", 0xd, 0xa, 0
+
+gdtinfo_unrealmode:
+   dw gdtinfo_unrealmode_end - gdt_null_seg - 1     ;last byte in table
+   dd gdt_null_seg                                  ;start of table
+ 
+gdt_null_seg    dd 0,0                             ; entry 0 is always unused
+gdt_data_seg    db 0xff, 0xff, 0, 0, 0, 10010010b, 11001111b, 0
+gdtinfo_unrealmode_end: 
+
 ; CR3寄存器结构; 拷贝自intel SDM
 ;[Table 4-3.  Use of CR3 with 32-Bit Paging]
 ;-Bit     Contents-
@@ -514,8 +567,6 @@ InitGDT:
 
 
 times   3584-($-$$)  db  0xcc
-
-
 
 ; [CHS]
 ; Reading or writing an ATA hard disk in Real Mode with CHS addressing is precisely the same as doing the same operation on a floppy drive. Also remember that there are severe addressing limitations with CHS addressing. Typically only the first 8 GB of the media can be accessed, at most. And when you read from USB (as floppy), 1440 KB is the most.

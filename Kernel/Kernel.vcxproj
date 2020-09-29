@@ -23,13 +23,13 @@
     <ProjectGuid>{45719197-93E8-4025-8C63-B155BB5D5888}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Kernel</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
     <SpectreMitigation>false</SpectreMitigation>
   </PropertyGroup>
@@ -107,7 +107,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <EntryPointSymbol>Startup</EntryPointSymbol>
+      <EntryPointSymbol>main</EntryPointSymbol>
       <SetChecksum>true</SetChecksum>
       <BaseAddress>0xC0000000</BaseAddress>
       <RandomizedBaseAddress>true</RandomizedBaseAddress>

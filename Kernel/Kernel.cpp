@@ -1,18 +1,17 @@
 ﻿// Kernel.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
 //
-static int Main();
-int Startup()
-{
-    Main();
-    return  0;
-}
 
 void write_string(int colour, const char *string);
 
-static int Main()
+void DebugUpdateCur(int x, int y);
+
+int aa = 0;
+
+int main()
 {
-    
+    aa = 1;
     write_string(0xa, "test print in c");
+    DebugUpdateCur(15, 0);
     while (true)
     {
 
@@ -30,13 +29,57 @@ void write_string(int colour, const char *string)
     }
 }
 
-// 运行程序: Ctrl + F5 或调试 >“开始执行(不调试)”菜单
-// 调试程序: F5 或调试 >“开始调试”菜单
+//! read byte from device using port mapped io
+unsigned char _cdecl inportb(unsigned short portid) {
+#ifdef _MSC_VER
+    _asm {
+        mov		dx, word ptr[portid]
+        in		al, dx
+        mov		byte ptr[portid], al
+    }
+#endif
+    return (unsigned char)portid;
+}
 
-// 入门使用技巧: 
-//   1. 使用解决方案资源管理器窗口添加/管理文件
-//   2. 使用团队资源管理器窗口连接到源代码管理
-//   3. 使用输出窗口查看生成输出和其他消息
-//   4. 使用错误列表窗口查看错误
-//   5. 转到“项目”>“添加新项”以创建新的代码文件，或转到“项目”>“添加现有项”以将现有代码文件添加到项目
-//   6. 将来，若要再次打开此项目，请转到“文件”>“打开”>“项目”并选择 .sln 文件
+
+//! write byte to device through port mapped io
+void _cdecl outportb(unsigned short portid, unsigned char value) {
+#ifdef _MSC_VER
+    _asm {
+        mov		al, byte ptr[value]
+        mov		dx, word ptr[portid]
+        out		dx, al
+    }
+#endif
+}
+
+
+//! enable all hardware interrupts
+void _cdecl enable() {
+#ifdef _MSC_VER
+    _asm sti
+#endif
+}
+
+
+//! disable all hardware interrupts
+void _cdecl disable() {
+#ifdef _MSC_VER
+    _asm cli
+#endif
+}
+
+
+void DebugUpdateCur(int x, int y) {
+
+    // get location
+    unsigned short cursorLocation = y * 80 + x;
+
+
+    // send location to vga controller to set cursor
+
+    outportb(0x3D4, 14);
+    outportb(0x3D5, cursorLocation >> 8); // Send the high byte.
+    outportb(0x3D4, 15);
+    outportb(0x3D5, (unsigned char)cursorLocation);      // Send the low byte.
+}

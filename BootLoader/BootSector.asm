@@ -1,16 +1,9 @@
-
 ; compile: nasm -f bin BootSector.asm -o ./bin/BootSector.bin
-;     run: qemu-system-x86_64.exe ./bin/BootSector.bin
 
 [bits 16]
-
 org 0x7c00
-
-jmp start
-
-TestMsg db "returned from loader??", 0xd, 0xa, 0
-IOError db "Disk IO Failed:BootSec", 0xd , 0xa , 0
-LogoStr db "................", 0xd, 0xa,  0xd, 0xa, "ZhaZha BootLoader - 20200922", 0
+    xchg    bx, bx
+    jmp     start
 
 start:
     cli
@@ -18,6 +11,7 @@ start:
     mov     ds, ax
     mov     ss, ax
     mov     es, ax
+    mov     fs, ax
     mov     sp, 0x8000
     sti
     
@@ -30,8 +24,10 @@ start:
     mov     cl,2
     mov     bx,0x8000
     call    ReadSector
+
     mov     bx,0x8000
     call    bx
+    
     push    TestMsg
     call    PrintString
     jmp $
@@ -85,7 +81,9 @@ PrintString:
     pop     si
     ret     2;
 
-
+TestMsg db "returned from loader??", 0xd, 0xa, 0
+IOError db "Disk IO Failed:BootSec", 0xd , 0xa , 0
+LogoStr db "................", 0xd, 0xa,  0xd, 0xa, "ZhaZha BootLoader - 20200922", 0
 
 times   510-($-$$)  db  0xcc        ;填充, 凑够512字节
 dw      0xAA55                      ;MBR Magic
