@@ -6,32 +6,18 @@ static struct l_gdtr		g_idtr = { 0 };
 static struct GDT_DESC	    g_gdt_descs[3] = { 0 };
 static struct l_gdtr		g_gdtr = { 0 };
 
-
 void    InitGDTIDT()
 {
+ 
+    g_gdtr.base     = &g_gdt_descs;
+    g_gdtr.limit    = sizeof(g_gdt_descs) - 1;
 
-    g_gdt_descs[1].AVL              = 1;
-    g_gdt_descs[1].base_high_8      = 0;
-    g_gdt_descs[1].base_low_24      = 0;
-    g_gdt_descs[1].DB_Default_Bits  = 1;
-    g_gdt_descs[1].DPL              = 0;
-    g_gdt_descs[1].Granularity      = 1;
-    g_gdt_descs[1].Limit_high_4     = 0xF;
-    g_gdt_descs[1].limit_low_16     = 0xFFFF;
-    g_gdt_descs[1].LongMode         = 0;
-    g_gdt_descs[1].Present          = 1;
-    g_gdt_descs[1].SystemSegment    = 1;
-    g_gdt_descs[1].type.executable  = 1;
-    g_gdt_descs[1].type.rw          = 1;
-    g_gdt_descs[1].type.DC.comform  = 0;
-    
+    g_gdt_descs[0].Init(0, 0, 0, 0, 0);
+    g_gdt_descs[1].Init(0, 0xfffff, 10, 12, 9);
+    g_gdt_descs[2].Init(0, 0xfffff, 2, 12, 9);
 
-    g_gdt_descs[2] = g_gdt_descs[1];
-    g_gdt_descs[2].type.executable = 0;
-    g_gdtr.base = (unsigned int)&g_gdt_descs;
-    g_gdtr.limit = sizeof(g_gdt_descs[0]) - 1;
-
-    _asm    xchg bx,bx
+    //bochs magic breakpoint
+    //_asm    xchg bx,bx
 
     __asm   lgdt [g_gdtr]
 }
@@ -47,7 +33,7 @@ void write_string(int colour, const char *string)
 }
 
 //! read byte from device using port mapped io
-unsigned char _cdecl inportb(unsigned short portid) 
+uint8_t _cdecl inportb(uint16_t portid) 
 {
 #ifdef _MSC_VER
     _asm {
@@ -56,12 +42,12 @@ unsigned char _cdecl inportb(unsigned short portid)
         mov		byte ptr[portid], al
     }
 #endif
-    return (unsigned char)portid;
+    return (uint8_t)portid;
 }
 
 
 //! write byte to device through port mapped io
-void _cdecl outportb(unsigned short portid, unsigned char value)
+void _cdecl outportb(uint16_t portid, uint8_t value)
 {
 #ifdef _MSC_VER
     _asm {

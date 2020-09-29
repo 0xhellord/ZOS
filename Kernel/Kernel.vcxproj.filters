@@ -26,5 +26,8 @@
     <ClInclude Include="Archi386.h">
       <Filter>源文件</Filter>
     </ClInclude>
+    <ClInclude Include="stdint.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

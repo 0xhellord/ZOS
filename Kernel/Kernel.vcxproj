@@ -23,7 +23,6 @@
     <ProjectGuid>{45719197-93E8-4025-8C63-B155BB5D5888}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>Kernel</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.15063.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -77,7 +76,7 @@
     <LinkIncremental>false</LinkIncremental>
     <GenerateManifest>false</GenerateManifest>
     <OutDir>$(SolutionDir)..\bin\</OutDir>
-    <IntDir>$(SolutionDir)..\temp\</IntDir>
+    <IntDir>$(SolutionDir)\.vs\temp\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -87,7 +86,7 @@
     <LinkIncremental>false</LinkIncremental>
     <GenerateManifest>false</GenerateManifest>
     <OutDir>$(SolutionDir)..\bin\</OutDir>
-    <IntDir>$(SolutionDir)..\temp\</IntDir>
+    <IntDir>$(SolutionDir)\.vs\temp\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
@@ -99,16 +98,18 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <ConformanceMode>false</ConformanceMode>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <OmitDefaultLibName>true</OmitDefaultLibName>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <ExceptionHandling>false</ExceptionHandling>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <SupportJustMyCode>false</SupportJustMyCode>
+      <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
+      <ForceConformanceInForLoopScope>true</ForceConformanceInForLoopScope>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Native</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <EntryPointSymbol>main</EntryPointSymbol>
@@ -164,10 +165,11 @@
       <EntryPointSymbol>main</EntryPointSymbol>
       <SetChecksum>true</SetChecksum>
       <BaseAddress>0xc0000000</BaseAddress>
-      <FixedBaseAddress>false</FixedBaseAddress>
       <SectionAlignment>512</SectionAlignment>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <Driver>Driver</Driver>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <FixedBaseAddress>false</FixedBaseAddress>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -195,6 +197,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Archi386.h" />
+    <ClInclude Include="stdint.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
