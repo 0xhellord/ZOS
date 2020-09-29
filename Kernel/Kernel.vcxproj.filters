@@ -18,5 +18,13 @@
     <ClCompile Include="Kernel.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Archi386.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Archi386.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

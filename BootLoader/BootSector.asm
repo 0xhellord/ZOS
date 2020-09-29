@@ -1,11 +1,13 @@
-; compile: nasm -f bin BootSector.asm -o ./bin/BootSector.bin
 
 [bits 16]
+
 org 0x7c00
+
     xchg    bx, bx
     jmp     start
 
 start:
+
     cli
     xor     ax, ax
     mov     ds, ax
@@ -15,35 +17,61 @@ start:
     mov     sp, 0x8000
     sti
     
+    mov     [BootDrive], dl
+
     call    PrintEndLine
     
     push    LogoStr
     call    PrintString
 
-    mov     al,0x7
-    mov     cl,2
-    mov     bx,0x8000
-    call    ReadSector
+    push    0x8000
+    push    0x7
+    push    0x2
+    push    0
+    push    0
+    push    word [BootDrive]
+    call    ReadSectorChs
+    ;check eax here
 
-    mov     bx,0x8000
+    ;transfer to kernel loader
+    mov     bx, 0x8000
     call    bx
     
     push    TestMsg
     call    PrintString
+
     jmp $
 
-; AL:Sector Count CL: Sector ES:BX: Buffer
-ReadSector:
-	mov ch, 0           ; Cylinder
-	mov dh, 0           ; Head
-                        ; DL = drive number passed from BIOS
-	mov ah, 2
-	int 13h
-	jnc OK
-	
-	push IOError
-	call PrintString
+; stdcall, args: DriveNo(From Bios); C; H; S; SectorCount; Buffer(ES:BX);
+ReadSectorChs:
+    push    bp
+    mov     bp, sp
+
+    push    dx
+    push    CX
+    push    bx
+
+    mov     dl, [bp + 0x4]           ; DriveNo
+	mov     ch, [bp + 0x6]           ; Cylinder
+	mov     dh, [bp + 0x8]           ; Head
+    mov     cl, [bp + 0xa]           ; Sector
+    mov     al, [bp + 0xc]           ; Sector Count
+    mov     bx, [bp + 0xe]           ; Buffer(es)
+
+	mov     ah, 2
+	int     13h
+
+	jnc     OK
+    
+	push    IOError
+	call    PrintString
+
 OK:
+    pop     bx
+    pop     CX
+    pop     dx
+    mov     sp, bp
+    pop     bp
 	ret
 
 PrintEndLine:
@@ -54,36 +82,47 @@ PrintEndLine:
     ret;
 
 PrintChar:
-    push    si
-    mov     si, sp
-    mov     al, [si+4]
+    push    bp
+    mov     bp, sp
+
+    mov     al, byte [bp + 4]
     mov     ah, 0xe
     int     0x10
-    pop     si
+    
+    mov     sp, bp
+    pop     bp
     ret     2
 
 PrintString:
+    push    bp
+    mov     bp, sp
     push    si
-    mov     si, sp
-    mov     si, [si+4]
+    mov     si, [bp + 4]
     mov     ah, 0xe
     cld
 
     REPEAT:
+        
         lodsb
+
         test    al, al
         jz      END
+
         int     0x10
+
         jmp     REPEAT
 
     END:
         call    PrintEndLine
     pop     si
+    mov     sp, bp
+    pop     bp
     ret     2;
 
-TestMsg db "returned from loader??", 0xd, 0xa, 0
-IOError db "Disk IO Failed:BootSec", 0xd , 0xa , 0
-LogoStr db "................", 0xd, 0xa,  0xd, 0xa, "ZhaZha BootLoader - 20200922", 0
+BootDrive   db 0,0
+TestMsg     db "BootSec: Returned from loader??", 0xd, 0xa, 0
+IOError     db "BootSec: ReadSectorChs Failed!!", 0xd, 0xa, 0
+LogoStr     db "................", 0xd, 0xa,  0xd, 0xa, "ZhaZha BootLoader - 20200922", 0
 
 times   510-($-$$)  db  0xcc        ;填充, 凑够512字节
 dw      0xAA55                      ;MBR Magic

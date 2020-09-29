@@ -17,7 +17,6 @@
 ; 0XC0000400为内核加载虚拟地址
 ; 8000h作为栈
 
-
 [bits 16]
 
 ;//实模式int13 读盘缓冲区
@@ -25,8 +24,7 @@ INT13_RM_MODE_BUFFER equ 0x500
 
 org 0x8000
     xchg        bx, bx
-    jmp start
-
+    jmp         start
 
 start:
     xor         ax, ax
@@ -59,7 +57,6 @@ start:
     pop         es
     pop         ds                 ; get back old segment
     
-
     push        LOGO
     call        PrintString
 
@@ -76,7 +73,6 @@ LOOP_READ_KERNEL:
 	
     mov			cx,  1				;sector count;
 	call		ReadSectorLBA
-
 
     pop         ecx
     push        ecx
@@ -134,6 +130,7 @@ PMENTRY:
     cmp         eax, 0
     je          ERROR_KERNEL_ENTRY
     jmp         eax
+
 ERROR_KERNEL_ENTRY:
     mov         ebx, ERROR_ENTRY
     call        print_string_pm
@@ -145,14 +142,14 @@ InitVideo:
 	cld 
 	mov	        edi, VIDEO_MEMORY
 	mov	        cx, 2000
-	mov	        ah, 14
+	mov	        ah, 0x1e
 	mov	        al, ' '	
 	rep	        stosw
 	popa
 	ret
 
 VIDEO_MEMORY    equ 0xb8000
-WHITE_ON_BLACK  equ 0x0A ; the color byte for each character
+WHITE_ON_BLACK  equ 0x1e ; the color byte for each character
 
 print_string_pm:
     pusha
@@ -216,14 +213,14 @@ InitPaging:
 	;	the 768th table starts the 3gb virtual address
 	;------------------------------------------
     
-	mov		    eax, PAGE_TABLE_768				; first page table
+	mov		    eax, PAGE_TABLE_768				    ; first page table
 	mov		    ebx, KERNEL_PHY_BASE | PRIV			; starting physical address of page
-	mov		    ecx, PAGE_TABLE_ENTRIES			; for every page in table...
+	mov		    ecx, PAGE_TABLE_ENTRIES			    ; for every page in table...
 .loop2: 
-	mov		    dword [eax], ebx				; write the entry
-	add		    eax, 4							; go to next page entry in table (Each entry is 4 bytes)
-	add		    ebx, PAGES_IZE  				; go to next page address (Each page is 4Kb)
-	loop	    .loop2							; go to next entry
+	mov		    dword [eax], ebx				    ; write the entry
+	add		    eax, 4							    ; go to next page entry in table (Each entry is 4 bytes)
+	add		    ebx, PAGES_IZE  				    ; go to next page address (Each page is 4Kb)
+	loop	    .loop2							    ; go to next entry
 
 	;------------------------------------------
 	;	set up the entries in the directory table
@@ -250,50 +247,48 @@ InitPaging:
 	or		    eax, 0x80000000
 	mov		    cr0, eax
 
-
-
 	popa
 	ret
 
 GetPEEntry:
     push        ebp  
-    mov         ebp,esp  
-    sub         esp,48h  
+    mov         ebp, esp  
+    sub         esp, 48h  
     push        ebx  
     push        esi  
     push        edi  
 
-    mov         eax,dword [ebp+8]  
-    mov         dword [ebp-4],eax  
-    mov         eax,dword [ebp-4]  
-    movzx       ecx,word [eax]  
+    mov         eax, dword [ebp + 8]
+    mov         dword [ebp - 4], eax
+    mov         eax, dword [ebp - 4]  
+    movzx       ecx, word [eax]
 
-    cmp         ecx,5A4Dh  
+    cmp         ecx, 5A4Dh  
     jne         ERROR_RET  
 
-    mov         eax,dword [ebp-4]  
-    mov         ecx,dword [ebp-4]  
-    add         ecx,dword [eax+3Ch]  
-    mov         dword [ebp-8],ecx
-    mov         eax,dword [ebp-8]  
+    mov         eax, dword [ebp - 4]  
+    mov         ecx, dword [ebp - 4]  
+    add         ecx, dword [eax + 3Ch]  
+    mov         dword [ebp - 8], ecx
+    mov         eax, dword [ebp - 8]  
 
-    cmp         dword [eax],4550h  
+    cmp         dword [eax], 4550h  
     jne         ERROR_RET  
 
-    mov         eax,dword [ebp-8]  
-    mov         ecx,dword [ebp+8]  
-    add         ecx,dword [eax+28h]  
-    mov         eax,ecx  
+    mov         eax, dword [ebp - 8]  
+    mov         ecx, dword [ebp + 8]  
+    add         ecx, dword [eax + 28h]  
+    mov         eax, ecx  
     jmp         RET  
 
 ERROR_RET:
-    xor         eax,eax
+    xor         eax, eax
 
 RET:
     pop         edi  
     pop         esi  
     pop         ebx  
-    mov         esp,ebp  
+    mov         esp, ebp  
     pop         ebp  
     ret         4  
 
@@ -373,32 +368,42 @@ PrintEndLine:
     ret
 
 PrintChar:
-    push    si
-    mov     si, sp
-    mov     al, [si+4]
+    push    bp
+    mov     bp, sp
+
+    mov     al, byte [bp + 4]
     mov     ah, 0xe
     int     0x10
-    pop     si
+    
+    mov     sp, bp
+    pop     bp
     ret     2
 
 PrintString:
+    push    bp
+    mov     bp, sp
     push    si
-    mov     si, sp
-    mov     si, [si+4]
+    mov     si, [bp + 4]
     mov     ah, 0xe
     cld
 
     REPEAT:
+        
         lodsb
+
         test    al, al
         jz      END
+
         int     0x10
+
         jmp     REPEAT
 
     END:
-    ;call    PrintEndLine
+        call    PrintEndLine
     pop     si
-    ret     2
+    mov     sp, bp
+    pop     bp
+    ret     2;
 
 ; Input: 	ax - LBA value
 ; Output: 	ax - Sector

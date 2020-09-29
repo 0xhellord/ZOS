@@ -27,7 +27,7 @@ rem 写入BootSector
 rem 写入KernelLoader, 从512偏移开始写
 ..\tool\dd if=..\bin\Boot-1-Loader.bin of=..\bin\BootImg.img bs=512 seek=1
 rem 写入Kernel, 从4K 偏移开始写
-..\tool\dd if=..\bin\Boot-2-Kernel.bin of=..\bin\BootImg.img bs=512 seek=8
+..\tool\dd if=..\bin\Boot-2-Kernel.bin of=..\bin\BootImg.img seek=8
 rem copy  /B /Y ..\bin\Boot-0-Sector.bin + ..\bin\Boot-1-Loader.bin + ..\bin\Boot-2-Kernel.bin+ ..\tool\objcopy.exe ..\bin\BootImg.img
 
 rem C:\qemu\qemu-system-i386.exe  -drive format=raw,file=..\bin\BootImg.img
