@@ -90,7 +90,7 @@ void    InitGDTIDT()
     g_gdt_descs[5].G_L = 0;
 
     tss_entry.ss0 = 0x10;
-    tss_entry.esp0 = 0xc03ffff0;
+    tss_entry.esp0 = 0x803ffff0;
     
     for (int i = 0; i < I86_MAX_INTERRUPTS; i++)
     {

@@ -103,7 +103,7 @@ LOOP_READ_KERNEL:
 
 [bits 32]
 
-KERNEL_VIR_BASE         equ 0XC0000000
+KERNEL_VIR_BASE         equ 0X80000000
 KERNEL_SIZE		        equ (1024*1024)
 PM_MODE_STACK	        equ 8000h
 KERNEL_SECTOR_LBA_COUNT equ (KERNEL_SIZE/512)
@@ -180,7 +180,7 @@ print_string_pm_done:
 %define		PAGE_TABLE_1		0x92000
 
 ; 768th page table. Address must be 4KB aligned
-%define		PAGE_TABLE_768		0x93000
+%define		PAGE_TABLE_512		0x93000
 
 ; each page table has 1024 entries
 %define		PAGE_TABLE_ENTRIES	1024
@@ -224,7 +224,7 @@ InitPaging:
 	;	the 768th table starts the 3gb virtual address
 	;------------------------------------------
     
-	mov		    eax, PAGE_TABLE_768				    ; first page table
+	mov		    eax, PAGE_TABLE_512				    ; first page table
 	mov		    ebx, KERNEL_PHY_BASE | PRIV			; starting physical address of page
 	mov		    ecx, PAGE_TABLE_ENTRIES			    ; for every page in table...
 .loop3: 
@@ -245,8 +245,8 @@ InitPaging:
 	mov		    eax, PAGE_TABLE_1 | 7			; 1st table is directory entry 0
 	mov		    dword [PAGE_DIR_CR3 + 1*4], eax
 
-	mov		    eax, PAGE_TABLE_768 | PRIV			; 768th entry in directory table
-	mov		    dword [PAGE_DIR_CR3 + (768*4)], eax
+	mov		    eax, PAGE_TABLE_512 | PRIV			; 768th entry in directory table
+	mov		    dword [PAGE_DIR_CR3 + (512*4)], eax
 
 	;------------------------------------------
 	;	install directory table
