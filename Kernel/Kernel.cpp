@@ -16,16 +16,16 @@ int main()
     __asm
     {
         mov ax, 0x23
-        mov ds, ax
+        mov ds, ax      //user mode ds,es,fs,gs
         mov es, ax
         mov fs, ax
-        mov gs, ax
+        mov gs, ax      
 
-        push 0x23
-        push esp
-        pushfd
-        push 0x1b
-        push 0x400000
+        push 0x23       //user mode ss 
+        push esp        //user mode esp
+        pushfd          //eflags
+        push 0x1b       //user mode cs
+        push 0x400000   //user mode eip
         iretd
     }
 user_start:

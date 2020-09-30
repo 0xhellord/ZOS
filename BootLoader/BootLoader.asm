@@ -108,7 +108,7 @@ KERNEL_SIZE		        equ (1024*1024)
 PM_MODE_STACK	        equ 8000h
 KERNEL_SECTOR_LBA_COUNT equ (KERNEL_SIZE/512)
 KERNEL_SECTOR_LBA_BEGIN equ 8
-KERNEL_PHY_BASE         equ 0x100000
+KERNEL_PHY_BASE         equ 0x1000000
 
 PMENTRY:
     mov	        ax, DATA_SEG		; set data segments to data selector (0x10)
@@ -186,7 +186,7 @@ print_string_pm_done:
 %define		PAGE_TABLE_ENTRIES	1024
 
 ; attributes (page is present;page is writable; supervisor mode)
-%define		PRIV				3
+%define		PRIV				7
 
 PAGES_IZE       equ     4096
 ;****************************************
