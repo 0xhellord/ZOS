@@ -177,9 +177,10 @@ print_string_pm_done:
 
 ; 0th page table. Address must be 4KB aligned
 %define		PAGE_TABLE_0		0x91000
+%define		PAGE_TABLE_1		0x92000
 
 ; 768th page table. Address must be 4KB aligned
-%define		PAGE_TABLE_768		0x92000
+%define		PAGE_TABLE_768		0x93000
 
 ; each page table has 1024 entries
 %define		PAGE_TABLE_ENTRIES	1024
@@ -208,13 +209,9 @@ InitPaging:
 	add		    ebx, PAGES_IZE						; go to next page address (Each page is 4Kb)
 	loop	    .loop								; go to next entry
 
-	;------------------------------------------
-	;	map the 768th table to physical addr 1MB
-	;	the 768th table starts the 3gb virtual address
-	;------------------------------------------
-    
-	mov		    eax, PAGE_TABLE_768				    ; first page table
-	mov		    ebx, KERNEL_PHY_BASE | PRIV			; starting physical address of page
+
+	mov		    eax, PAGE_TABLE_1				    ; first page table
+	mov		    ebx, 0x400000 | 7			        ; starting physical address of page
 	mov		    ecx, PAGE_TABLE_ENTRIES			    ; for every page in table...
 .loop2: 
 	mov		    dword [eax], ebx				    ; write the entry
@@ -223,14 +220,33 @@ InitPaging:
 	loop	    .loop2							    ; go to next entry
 
 	;------------------------------------------
+	;	map the 768th table to physical addr 1MB
+	;	the 768th table starts the 3gb virtual address
+	;------------------------------------------
+    
+	mov		    eax, PAGE_TABLE_768				    ; first page table
+	mov		    ebx, KERNEL_PHY_BASE | PRIV			; starting physical address of page
+	mov		    ecx, PAGE_TABLE_ENTRIES			    ; for every page in table...
+.loop3: 
+	mov		    dword [eax], ebx				    ; write the entry
+	add		    eax, 4							    ; go to next page entry in table (Each entry is 4 bytes)
+	add		    ebx, PAGES_IZE  				    ; go to next page address (Each page is 4Kb)
+	loop	    .loop3							    ; go to next entry
+
+
+
+	;------------------------------------------
 	;	set up the entries in the directory table
 	;------------------------------------------
 
 	mov		    eax, PAGE_TABLE_0 | PRIV			; 1st table is directory entry 0
 	mov		    dword [PAGE_DIR_CR3], eax
 
+	mov		    eax, PAGE_TABLE_1 | 7			; 1st table is directory entry 0
+	mov		    dword [PAGE_DIR_CR3 + 1*4], eax
+
 	mov		    eax, PAGE_TABLE_768 | PRIV			; 768th entry in directory table
-	mov		    dword [PAGE_DIR_CR3+(768*4)], eax
+	mov		    dword [PAGE_DIR_CR3 + (768*4)], eax
 
 	;------------------------------------------
 	;	install directory table

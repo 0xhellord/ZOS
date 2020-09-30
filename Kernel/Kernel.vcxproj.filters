@@ -21,6 +21,12 @@
     <ClCompile Include="Archi386.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="pic.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="pit.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Archi386.h">
@@ -28,6 +34,12 @@
     </ClInclude>
     <ClInclude Include="stdint.h">
       <Filter>源文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pic.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="pit.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
