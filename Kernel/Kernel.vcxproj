@@ -123,6 +123,8 @@
       <NoEntryPoint>false</NoEntryPoint>
       <Driver>Driver</Driver>
       <SectionAlignment>512</SectionAlignment>
+      <AdditionalDependencies>
+      </AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">

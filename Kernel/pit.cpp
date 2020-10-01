@@ -68,7 +68,7 @@ void _declspec(naked) i86_pit_irq () {
 
 	//! increment tick count
 	_pit_ticks++;
-    DebugUpdateCur(_pit_ticks % 79, _pit_ticks % 24);
+    DebugUpdateCur(_pit_ticks % 79, 0);
 
 	//! tell hal we are done
 	interruptdone(0);

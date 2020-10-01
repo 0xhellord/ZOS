@@ -2,6 +2,10 @@
 #include "stdint.h"
 
 #pragma pack(push, 1)
+struct  regs16_t {
+    unsigned short di, si, bp, sp, bx, dx, cx, ax;
+    unsigned short gs, fs, es, ds, eflags;
+};
 struct gdt_entry_bits
 {
     unsigned int limit_low : 16;

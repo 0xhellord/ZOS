@@ -16,13 +16,13 @@ void SetVec(int vec, void* handler)
     g_idt_descs[vec].Init((unsigned int)handler, 8, I86_IDT_DESC_BIT32 | I86_IDT_DESC_PRESENT);
 }
 
-static void i86_default_handler() 
+void _declspec(naked) i86_default_handler()
 {
-    disable();
-
+    _asm pusha
     write_string(0x1e, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
-
-    for (;;);
+    _asm popa
+    //_asm xchg bx,bx
+    _asm iretd
 }
 void flush_tss(uint16_t sel) {
 
